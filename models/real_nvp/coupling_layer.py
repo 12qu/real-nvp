@@ -63,6 +63,7 @@ class CouplingLayer(nn.Module):
 
                 # Add log-determinant of the Jacobian
                 sldj += s.view(s.size(0), -1).sum(-1)
+
         else:
             # Channel-wise mask
             if self.reverse_mask:
