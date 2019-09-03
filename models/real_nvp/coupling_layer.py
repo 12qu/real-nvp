@@ -12,7 +12,7 @@ class MaskType(IntEnum):
 
 def get_st_net_without_skip_or_double_input_or_leading_bn(num_channels, num_hidden_channels):
     return nn.Sequential(
-        nn.Conv2d(num_channels, num_hidden_channels, kernel_size=3),
+        nn.Conv2d(num_channels, num_hidden_channels, kernel_size=3, padding=1),
 
         NewResidualBlock(num_hidden_channels),
         NewResidualBlock(num_hidden_channels),
@@ -23,7 +23,7 @@ def get_st_net_without_skip_or_double_input_or_leading_bn(num_channels, num_hidd
         NewResidualBlock(num_hidden_channels),
         NewResidualBlock(num_hidden_channels),
 
-        nn.BatchNorm2d(num_channels),
+        nn.BatchNorm2d(num_hidden_channels),
         nn.ReLU(),
         nn.Conv2d(
             in_channels=num_hidden_channels,
