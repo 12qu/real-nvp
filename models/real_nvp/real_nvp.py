@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from models.real_nvp.coupling_layer import CouplingLayer, MaskType
-from util import squeeze_2x2
 
 
 class RealNVP(nn.Module):
@@ -94,51 +93,16 @@ class _RealNVP(nn.Module):
             CouplingLayer(in_channels, mid_channels, num_blocks, MaskType.CHECKERBOARD, reverse_mask=False)
         ])
 
-        if self.is_last_block:
-            self.in_couplings.append(
-                CouplingLayer(in_channels, mid_channels, num_blocks, MaskType.CHECKERBOARD, reverse_mask=True))
-        else:
-            self.out_couplings = nn.ModuleList([
-                CouplingLayer(4 * in_channels, 2 * mid_channels, num_blocks, MaskType.CHANNEL_WISE, reverse_mask=False),
-                CouplingLayer(4 * in_channels, 2 * mid_channels, num_blocks, MaskType.CHANNEL_WISE, reverse_mask=True),
-                CouplingLayer(4 * in_channels, 2 * mid_channels, num_blocks, MaskType.CHANNEL_WISE, reverse_mask=False)
-            ])
-            self.next_block = _RealNVP(scale_idx + 1, num_scales, 2 * in_channels, 2 * mid_channels, num_blocks)
+        assert self.is_last_block
+        self.in_couplings.append(
+            CouplingLayer(in_channels, mid_channels, num_blocks, MaskType.CHECKERBOARD, reverse_mask=True))
 
     def forward(self, x, sldj, reverse=False):
         if reverse:
-            if not self.is_last_block:
-                # Re-squeeze -> split -> next block
-                x = squeeze_2x2(x, reverse=False, alt_order=True)
-                x, x_split = x.chunk(2, dim=1)
-                x, sldj = self.next_block(x, sldj, reverse)
-                x = torch.cat((x, x_split), dim=1)
-                x = squeeze_2x2(x, reverse=True, alt_order=True)
-
-                # Squeeze -> 3x coupling (channel-wise)
-                x = squeeze_2x2(x, reverse=False)
-                for coupling in reversed(self.out_couplings):
-                    x, sldj = coupling(x, sldj, reverse)
-                x = squeeze_2x2(x, reverse=True)
-
             for coupling in reversed(self.in_couplings):
                 x, sldj = coupling(x, sldj, reverse)
         else:
             for coupling in self.in_couplings:
                 x, sldj = coupling(x, sldj, reverse)
-
-            if not self.is_last_block:
-                # Squeeze -> 3x coupling (channel-wise)
-                x = squeeze_2x2(x, reverse=False)
-                for coupling in self.out_couplings:
-                    x, sldj = coupling(x, sldj, reverse)
-                x = squeeze_2x2(x, reverse=True)
-
-                # Re-squeeze -> split -> next block
-                x = squeeze_2x2(x, reverse=False, alt_order=True)
-                x, x_split = x.chunk(2, dim=1)
-                x, sldj = self.next_block(x, sldj, reverse)
-                x = torch.cat((x, x_split), dim=1)
-                x = squeeze_2x2(x, reverse=True, alt_order=True)
 
         return x, sldj
