@@ -10,6 +10,29 @@ class MaskType(IntEnum):
     CHECKERBOARD = 0
     CHANNEL_WISE = 1
 
+def get_st_net_unchanged(num_channels, num_hidden_channels):
+    return nn.Sequential(
+        ResidualBlock(num_channels, num_hidden_channels),
+        nn.ReLU(),
+        ResidualBlock(num_hidden_channels, num_hidden_channels),
+        nn.ReLU(),
+        ResidualBlock(num_hidden_channels, num_hidden_channels),
+        nn.ReLU(),
+        ResidualBlock(num_hidden_channels, num_hidden_channels),
+        nn.ReLU(),
+        ResidualBlock(num_hidden_channels, num_hidden_channels),
+        nn.ReLU(),
+        ResidualBlock(num_hidden_channels, num_hidden_channels),
+        nn.ReLU(),
+        ResidualBlock(num_hidden_channels, num_hidden_channels),
+        nn.ReLU(),
+        ResidualBlock(
+            num_hidden_channels,
+            num_channels * 2,
+            init_to_identity=True
+        )
+    )
+
 
 def get_st_net(num_channels, num_hidden_channels):
     return nn.Sequential(
@@ -54,12 +77,12 @@ class CouplingLayer(nn.Module):
         # Build scale and translate network
         if self.mask_type == MaskType.CHANNEL_WISE:
             in_channels //= 2
-        self.st_net = ResNet(in_channels, mid_channels, 2 * in_channels,
-                             num_blocks=num_blocks, kernel_size=3, padding=1,
-                             double_after_norm=(self.mask_type == MaskType.CHECKERBOARD))
-        #                      double_after_norm=False)
+        # self.st_net = ResNet(in_channels, mid_channels, 2 * in_channels,
+        #                      num_blocks=num_blocks, kernel_size=3, padding=1,
+        #                      double_after_norm=(self.mask_type == MaskType.CHECKERBOARD))
 
-        self.st_net = get_st_net(in_channels, mid_channels)
+        # self.st_net = get_st_net(in_channels, mid_channels)
+        self.st_net = get_st_net_unchanged(in_channels, mid_channels)
 
         # Learnable scale for s
         self.rescale = nn.utils.weight_norm(Rescale(in_channels))

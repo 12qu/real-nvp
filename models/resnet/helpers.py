@@ -35,12 +35,12 @@ class ResidualBlock(nn.Module):
                 p.data.zero_()
 
     def forward(self, inputs):
-        out = self.conv1(inputs)
-        out = self.bn1(out)
+        out = self.bn1(inputs)
+        out = self.conv1(out)
         out = self.relu(out)
 
-        out = self.conv2(out)
         out = self.bn2(out)
+        out = self.conv2(out)
 
         out = out + self.proj(inputs)
 

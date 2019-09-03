@@ -20,7 +20,7 @@ from tensorboardX import SummaryWriter
 channels = None
 height = None
 width = None
-writer = SummaryWriter(comment="baseline")
+writer = SummaryWriter(comment="our_net_bn_after_relu")
 
 def main(args):
     device = 'cuda' if torch.cuda.is_available() and len(args.gpu_ids) > 0 else 'cpu'
@@ -74,8 +74,8 @@ def main(args):
     optimizer = optim.Adam(param_groups, lr=args.lr)
 
     for epoch in range(start_epoch, start_epoch + args.num_epochs):
-        train(epoch, net, trainloader, device, optimizer, loss_fn, args.max_grad_norm)
         test(epoch, net, testloader, device, loss_fn, args.num_samples)
+        train(epoch, net, trainloader, device, optimizer, loss_fn, args.max_grad_norm)
 
 
 step = 0
@@ -94,6 +94,7 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm):
             loss.backward()
             util.clip_grad_norm(optimizer, max_grad_norm)
             optimizer.step()
+
 
             writer.add_scalar("mnist/train-loss", loss.item(), global_step=step)
             step += 1
@@ -152,6 +153,8 @@ def test(epoch, net, testloader, device, loss_fn, num_samples):
     os.makedirs('samples', exist_ok=True)
     images_concat = torchvision.utils.make_grid(images, nrow=int(num_samples ** 0.5), padding=2, pad_value=255)
     torchvision.utils.save_image(images_concat, 'samples/epoch_{}.png'.format(epoch))
+
+    writer.add_image("mnist/samples", images_concat / 256, global_step=epoch)
 
 
 if __name__ == '__main__':
