@@ -2,13 +2,36 @@ import torch
 import torch.nn as nn
 
 from enum import IntEnum
-from models.resnet import ResNet
+from models.resnet import ResNet, ResidualBlock
 from util import checkerboard_mask
 
 
 class MaskType(IntEnum):
     CHECKERBOARD = 0
     CHANNEL_WISE = 1
+
+
+def get_st_net(num_channels, num_hidden_channels):
+    return nn.Sequential(
+        ResidualBlock(num_channels, num_hidden_channels),
+        nn.ReLU(),
+        ResidualBlock(num_hidden_channels, num_hidden_channels),
+        nn.ReLU(),
+        ResidualBlock(num_hidden_channels, num_hidden_channels),
+        nn.ReLU(),
+        ResidualBlock(num_hidden_channels, num_hidden_channels),
+        nn.ReLU(),
+        ResidualBlock(num_hidden_channels, num_hidden_channels),
+        nn.ReLU(),
+        ResidualBlock(num_hidden_channels, num_hidden_channels),
+        nn.ReLU(),
+        ResidualBlock(num_hidden_channels, num_hidden_channels),
+        nn.ReLU(),
+        ResidualBlock(num_hidden_channels, num_hidden_channels),
+        nn.ReLU(),
+        nn.Conv2d(in_channels=num_hidden_channels, out_channels=num_channels*2, kernel_size=1, stride=1, padding=0)
+    )
+
 
 
 class CouplingLayer(nn.Module):
@@ -34,6 +57,9 @@ class CouplingLayer(nn.Module):
         self.st_net = ResNet(in_channels, mid_channels, 2 * in_channels,
                              num_blocks=num_blocks, kernel_size=3, padding=1,
                              double_after_norm=(self.mask_type == MaskType.CHECKERBOARD))
+        #                      double_after_norm=False)
+
+        self.st_net = get_st_net(in_channels, mid_channels)
 
         # Learnable scale for s
         self.rescale = nn.utils.weight_norm(Rescale(in_channels))
