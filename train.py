@@ -15,9 +15,12 @@ import util
 from models import RealNVP, RealNVPLoss
 from tqdm import tqdm
 
+from tensorboardX import SummaryWriter
+
 channels = None
 height = None
 width = None
+writer = SummaryWriter(comment="baseline")
 
 def main(args):
     device = 'cuda' if torch.cuda.is_available() and len(args.gpu_ids) > 0 else 'cpu'
@@ -75,6 +78,7 @@ def main(args):
         test(epoch, net, testloader, device, loss_fn, args.num_samples)
 
 
+step = 0
 def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm):
     print('\nEpoch: %d' % epoch)
     net.train()
@@ -89,6 +93,9 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm):
             loss.backward()
             util.clip_grad_norm(optimizer, max_grad_norm)
             optimizer.step()
+
+            writer.add_scalar("mnist/train-loss", loss.item(), global_step=step)
+            step += 1
 
             progress_bar.set_postfix(loss=loss_meter.avg,
                                      bpd=util.bits_per_dim(x, loss_meter.avg))
@@ -136,6 +143,8 @@ def test(epoch, net, testloader, device, loss_fn, num_samples):
         os.makedirs('ckpts', exist_ok=True)
         torch.save(state, 'ckpts/best.pth.tar')
         best_loss = loss_meter.avg
+
+    writer.add_scalar("mnist/log-prob/mnist", loss_meter.avg, global_step=epoch)
 
     # Save samples and data
     images = sample(net, num_samples, device)
