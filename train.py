@@ -20,7 +20,7 @@ from tensorboardX import SummaryWriter
 channels = None
 height = None
 width = None
-writer = SummaryWriter(comment="_us", write_to_disk=False)
+writer = SummaryWriter(comment="_us")
 
 def main(args):
     device = 'cuda' if torch.cuda.is_available() and len(args.gpu_ids) > 0 else 'cpu'
@@ -38,10 +38,18 @@ def main(args):
 
     # trainset = torchvision.datasets.CIFAR10(root='data', train=True, download=True, transform=transform_train)
     trainset = torchvision.datasets.MNIST(root='data', train=True, download=True, transform=transform_train)
+    x_train = trainset.data.to(torch.get_default_dtype()).view(-1, 1, 28, 28)
+    x_train += torch.rand_like(x_train)
+    y_train = trainset.targets
+    trainset = data.TensorDataset(x_train, y_train)
     trainloader = data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
     # testset = torchvision.datasets.CIFAR10(root='data', train=False, download=True, transform=transform_test)
     testset = torchvision.datasets.MNIST(root='data', train=False, download=True, transform=transform_test)
+    x_test = testset.data.to(torch.get_default_dtype()).view(-1, 1, 28, 28)
+    x_test += torch.rand_like(x_test)
+    y_test = testset.targets
+    trainset = data.TensorDataset(x_test, y_test)
     testloader = data.DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
     global channels, height, width

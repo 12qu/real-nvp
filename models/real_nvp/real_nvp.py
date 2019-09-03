@@ -1,8 +1,11 @@
+import numpy as np
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from models.real_nvp.coupling_layer import CouplingLayer, MaskType
+from models.real_nvp.bijection import LogitTransformBijection
 
 
 class RealNVP(nn.Module):
@@ -22,16 +25,19 @@ class RealNVP(nn.Module):
     """
     def __init__(self, num_scales=2, in_channels=3, mid_channels=64, num_blocks=8):
         super(RealNVP, self).__init__()
+        lam = 1e-6
+        self.logit = LogitTransformBijection(input_shape=(1,28,28), lam=lam, add_log_jac=True)
+
         # Register data_constraint to pre-process images, not learnable
-        self.register_buffer('data_constraint', torch.tensor([0.9], dtype=torch.float32))
+        # self.register_buffer('data_constraint', torch.tensor([1 - 2*lam], dtype=torch.float32))
 
         self.flows = _RealNVP(0, num_scales, in_channels, mid_channels, num_blocks)
 
     def forward(self, x, reverse=False):
         sldj = None
         if not reverse:
-            # Expect inputs in [0, 1]
-            if x.min() < 0 or x.max() > 1:
+            # Expect inputs in [0, 256]
+            if x.min() < 0 or x.max() > 256:
                 raise ValueError('Expected x in [0, 1], got x with min/max {}/{}'
                                  .format(x.min(), x.max()))
 
@@ -55,18 +61,20 @@ class RealNVP(nn.Module):
             - Dequantization: https://arxiv.org/abs/1511.01844, Section 3.1
             - Modeling logits: https://arxiv.org/abs/1605.08803, Section 4.1
         """
-        y = (x * 255. + torch.rand_like(x)) / 256.
-        y = (2 * y - 1) * self.data_constraint
-        y = (y + 1) / 2
-        y = y.log() - (1. - y).log()
+        result = self.logit.x_to_z(x)
+        return result["z"], result["log-jac"].view(-1)
 
-        # Save log-determinant of Jacobian of initial transform
-        ldj = F.softplus(y) + F.softplus(-y) \
-            - F.softplus((1. - self.data_constraint).log() - self.data_constraint.log())
-        sldj = ldj.view(ldj.size(0), -1).sum(-1)
+    # def _pre_process(self, x):
+    #     y = (2 * x/256 - 1) * self.data_constraint
+    #     y = (y + 1) / 2
+    #     p = y
+    #     y = y.log() - (1. - y).log()
 
-        return y, sldj
+    #     # Save log-determinant of Jacobian of initial transform
+    #     ldj = -torch.log(1 - p) - torch.log(p) + np.log(self.data_constraint)
+    #     sldj = ldj.view(ldj.size(0), -1).sum(-1)
 
+    #     return y, sldj
 
 class _RealNVP(nn.Module):
     """Recursive builder for a `RealNVP` model.
