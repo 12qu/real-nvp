@@ -5,6 +5,8 @@ from enum import IntEnum
 from models.resnet import ResNet, ResidualBlock
 from util import checkerboard_mask
 
+from .realnvp import AffineCouplingBijection, ConvAffineCoupler
+
 
 class MaskType(IntEnum):
     CHECKERBOARD = 0
@@ -63,7 +65,20 @@ class CouplingLayer(nn.Module):
         # Learnable scale for s
         self.rescale = Rescale(in_channels)
 
+        assert self.mask_type == MaskType.CHECKERBOARD
+        mask = checkerboard_mask(28, 28, self.reverse_mask).squeeze(0)
+        self.bijection = AffineCouplingBijection(mask, coupler=ConvAffineCoupler(in_channels, mid_channels), num_u_channels=0)
+
     def forward(self, x, sldj=None, reverse=True):
+        if reverse:
+            result = self.bijection.z_to_x(x)
+            assert sldj is None
+            return result["x"], sldj
+        else:
+            result = self.bijection.x_to_z(x)
+            sldj += result["log-jac"].view(-1)
+            return result["z"], sldj
+
         if self.mask_type == MaskType.CHECKERBOARD:
             # Checkerboard mask
             b = checkerboard_mask(x.size(2), x.size(3), self.reverse_mask, device=x.device)
