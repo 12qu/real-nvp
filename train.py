@@ -80,6 +80,7 @@ def main(args):
 
 step = 0
 def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm):
+    global step
     print('\nEpoch: %d' % epoch)
     net.train()
     loss_meter = util.AverageMeter()
