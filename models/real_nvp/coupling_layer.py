@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from enum import IntEnum
-from models.resnet import ResNet, ResidualBlock, NewResidualBlock
+from models.resnet import ResNet, ResidualBlock
 from util import checkerboard_mask
 
 
@@ -10,18 +10,19 @@ class MaskType(IntEnum):
     CHECKERBOARD = 0
     CHANNEL_WISE = 1
 
-def get_st_net_without_skip_or_double_input_or_leading_bn(num_channels, num_hidden_channels):
+
+def get_st_net(num_channels, num_hidden_channels):
     return nn.Sequential(
         nn.Conv2d(num_channels, num_hidden_channels, kernel_size=3, padding=1),
 
-        NewResidualBlock(num_hidden_channels),
-        NewResidualBlock(num_hidden_channels),
-        NewResidualBlock(num_hidden_channels),
-        NewResidualBlock(num_hidden_channels),
-        NewResidualBlock(num_hidden_channels),
-        NewResidualBlock(num_hidden_channels),
-        NewResidualBlock(num_hidden_channels),
-        NewResidualBlock(num_hidden_channels),
+        ResidualBlock(num_hidden_channels),
+        ResidualBlock(num_hidden_channels),
+        ResidualBlock(num_hidden_channels),
+        ResidualBlock(num_hidden_channels),
+        ResidualBlock(num_hidden_channels),
+        ResidualBlock(num_hidden_channels),
+        ResidualBlock(num_hidden_channels),
+        ResidualBlock(num_hidden_channels),
 
         nn.BatchNorm2d(num_hidden_channels),
         nn.ReLU(),
@@ -31,90 +32,6 @@ def get_st_net_without_skip_or_double_input_or_leading_bn(num_channels, num_hidd
             kernel_size=1
         )
     )
-
-
-def get_st_net_without_skip_or_double_input(num_channels, num_hidden_channels):
-    return nn.Sequential(
-        nn.BatchNorm2d(num_channels),
-        nn.Conv2d(num_channels, num_hidden_channels, kernel_size=3, padding=1),
-
-        ResidualBlock(num_hidden_channels, num_hidden_channels),
-        ResidualBlock(num_hidden_channels, num_hidden_channels),
-        ResidualBlock(num_hidden_channels, num_hidden_channels),
-        ResidualBlock(num_hidden_channels, num_hidden_channels),
-        ResidualBlock(num_hidden_channels, num_hidden_channels),
-        ResidualBlock(num_hidden_channels, num_hidden_channels),
-        ResidualBlock(num_hidden_channels, num_hidden_channels),
-        ResidualBlock(num_hidden_channels, num_hidden_channels),
-
-        nn.ReLU(),
-        nn.BatchNorm2d(num_hidden_channels),
-        nn.Conv2d(num_hidden_channels, 2*num_channels, kernel_size=1)
-   )
-
-
-def get_st_net_unchanged_minus_relu(num_channels, num_hidden_channels):
-    return nn.Sequential(
-        ResidualBlock(num_channels, num_hidden_channels),
-        ResidualBlock(num_hidden_channels, num_hidden_channels),
-        ResidualBlock(num_hidden_channels, num_hidden_channels),
-        ResidualBlock(num_hidden_channels, num_hidden_channels),
-        ResidualBlock(num_hidden_channels, num_hidden_channels),
-        ResidualBlock(num_hidden_channels, num_hidden_channels),
-        ResidualBlock(num_hidden_channels, num_hidden_channels),
-        ResidualBlock(
-            num_hidden_channels,
-            num_channels * 2,
-            init_to_identity=False
-        )
-    )
-
-
-def get_st_net_unchanged(num_channels, num_hidden_channels):
-    return nn.Sequential(
-        ResidualBlock(num_channels, num_hidden_channels),
-        nn.ReLU(),
-        ResidualBlock(num_hidden_channels, num_hidden_channels),
-        nn.ReLU(),
-        ResidualBlock(num_hidden_channels, num_hidden_channels),
-        nn.ReLU(),
-        ResidualBlock(num_hidden_channels, num_hidden_channels),
-        nn.ReLU(),
-        ResidualBlock(num_hidden_channels, num_hidden_channels),
-        nn.ReLU(),
-        ResidualBlock(num_hidden_channels, num_hidden_channels),
-        nn.ReLU(),
-        ResidualBlock(num_hidden_channels, num_hidden_channels),
-        nn.ReLU(),
-        ResidualBlock(
-            num_hidden_channels,
-            num_channels * 2,
-            init_to_identity=True
-        )
-    )
-
-
-def get_st_net(num_channels, num_hidden_channels):
-    return nn.Sequential(
-        ResidualBlock(num_channels, num_hidden_channels),
-        nn.ReLU(),
-        ResidualBlock(num_hidden_channels, num_hidden_channels),
-        nn.ReLU(),
-        ResidualBlock(num_hidden_channels, num_hidden_channels),
-        nn.ReLU(),
-        ResidualBlock(num_hidden_channels, num_hidden_channels),
-        nn.ReLU(),
-        ResidualBlock(num_hidden_channels, num_hidden_channels),
-        nn.ReLU(),
-        ResidualBlock(num_hidden_channels, num_hidden_channels),
-        nn.ReLU(),
-        ResidualBlock(num_hidden_channels, num_hidden_channels),
-        nn.ReLU(),
-        ResidualBlock(num_hidden_channels, num_hidden_channels),
-        nn.ReLU(),
-        nn.Conv2d(in_channels=num_hidden_channels, out_channels=num_channels*2, kernel_size=1, stride=1, padding=0)
-    )
-
 
 
 class CouplingLayer(nn.Module):
@@ -141,11 +58,7 @@ class CouplingLayer(nn.Module):
         #                      num_blocks=num_blocks, kernel_size=3, padding=1,
         #                      double_after_norm=(self.mask_type == MaskType.CHECKERBOARD))
 
-        # self.st_net = get_st_net(in_channels, mid_channels)
-        # self.st_net = get_st_net_unchanged(in_channels, mid_channels)
-        # self.st_net = get_st_net_unchanged_minus_relu(in_channels, mid_channels)
-        # self.st_net = get_st_net_without_skip_or_double_input(in_channels, mid_channels)
-        self.st_net = get_st_net_without_skip_or_double_input_or_leading_bn(in_channels, mid_channels)
+        self.st_net = get_st_net(in_channels, mid_channels)
 
         # Learnable scale for s
         self.rescale = nn.utils.weight_norm(Rescale(in_channels))

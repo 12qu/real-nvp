@@ -7,10 +7,9 @@ import torch.nn as nn
 import torchvision.utils
 
 
-
 # TODO: Batch norm correct?
 # TODO: Correct to use 1x1 convolution as projection? Do we need it?
-class NewResidualBlock(nn.Module):
+class ResidualBlock(nn.Module):
     def __init__(
             self,
             num_channels,
@@ -52,76 +51,6 @@ class NewResidualBlock(nn.Module):
         conv = nn.Conv2d(
             in_channels=num_channels,
             out_channels=num_channels,
-            kernel_size=3,
-            stride=1,
-            padding=1
-        )
-
-        if weight_norm:
-            conv = nn.utils.weight_norm(conv)
-
-        return conv
-
-
-# TODO: Batch norm correct?
-# TODO: Correct to use 1x1 convolution as projection? Do we need it?
-class ResidualBlock(nn.Module):
-    def __init__(
-            self,
-            in_channels,
-            out_channels,
-            init_to_identity=False,
-            weight_norm=False,
-            batch_norm=True
-    ):
-        super().__init__()
-        self.bn1 = self._get_batch_norm(in_channels, enable=batch_norm)
-        self.conv1 = self._get_conv3x3(in_channels, out_channels, weight_norm)
-        self.bn2 = self._get_batch_norm(out_channels, enable=batch_norm)
-        self.conv2 = self._get_conv3x3(out_channels, out_channels, weight_norm)
-        self.relu = nn.ReLU()
-
-        if in_channels != out_channels:
-            self.proj = self._get_conv1x1(in_channels, out_channels)
-        else:
-            self.proj = nn.Identity()
-
-        if init_to_identity:
-            for p in self.conv2.parameters():
-                p.data.zero_()
-
-    def forward(self, inputs):
-        out = self.bn1(inputs)
-        out = self.relu(out)
-        out = self.conv1(out)
-
-        out = self.bn2(out)
-        out = self.relu(out)
-        out = self.conv2(out)
-
-        out = out + self.proj(inputs)
-
-        return out
-
-    def _get_batch_norm(self, channels, enable):
-        if enable:
-            return nn.BatchNorm2d(channels)
-        else:
-            return nn.Identity
-
-    def _get_conv1x1(self, in_channels, out_channels):
-        return nn.Conv2d(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            kernel_size=1,
-            stride=1,
-            padding=0
-        )
-
-    def _get_conv3x3(self, in_channels, out_channels, weight_norm):
-        conv = nn.Conv2d(
-            in_channels=in_channels,
-            out_channels=out_channels,
             kernel_size=3,
             stride=1,
             padding=1
