@@ -10,6 +10,23 @@ class MaskType(IntEnum):
     CHECKERBOARD = 0
     CHANNEL_WISE = 1
 
+def get_st_net_unchanged_minus_relu(num_channels, num_hidden_channels):
+    return nn.Sequential(
+        ResidualBlock(num_channels, num_hidden_channels),
+        ResidualBlock(num_hidden_channels, num_hidden_channels),
+        ResidualBlock(num_hidden_channels, num_hidden_channels),
+        ResidualBlock(num_hidden_channels, num_hidden_channels),
+        ResidualBlock(num_hidden_channels, num_hidden_channels),
+        ResidualBlock(num_hidden_channels, num_hidden_channels),
+        ResidualBlock(num_hidden_channels, num_hidden_channels),
+        ResidualBlock(
+            num_hidden_channels,
+            num_channels * 2,
+            init_to_identity=True
+        )
+    )
+
+
 def get_st_net_unchanged(num_channels, num_hidden_channels):
     return nn.Sequential(
         ResidualBlock(num_channels, num_hidden_channels),
@@ -82,7 +99,8 @@ class CouplingLayer(nn.Module):
         #                      double_after_norm=(self.mask_type == MaskType.CHECKERBOARD))
 
         # self.st_net = get_st_net(in_channels, mid_channels)
-        self.st_net = get_st_net_unchanged(in_channels, mid_channels)
+#        self.st_net = get_st_net_unchanged(in_channels, mid_channels)
+        self.st_net = get_st_net_unchanged_minus_relu(in_channels, mid_channels)
 
         # Learnable scale for s
         self.rescale = nn.utils.weight_norm(Rescale(in_channels))

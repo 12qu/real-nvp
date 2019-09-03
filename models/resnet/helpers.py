@@ -19,10 +19,10 @@ class ResidualBlock(nn.Module):
             batch_norm=True
     ):
         super().__init__()
+        self.bn1 = self._get_batch_norm(in_channels, enable=batch_norm)
         self.conv1 = self._get_conv3x3(in_channels, out_channels, weight_norm)
-        self.bn1 = self._get_batch_norm(out_channels, enable=batch_norm)
-        self.conv2 = self._get_conv3x3(out_channels, out_channels, weight_norm)
         self.bn2 = self._get_batch_norm(out_channels, enable=batch_norm)
+        self.conv2 = self._get_conv3x3(out_channels, out_channels, weight_norm)
         self.relu = nn.ReLU()
 
         if in_channels != out_channels:
@@ -36,10 +36,11 @@ class ResidualBlock(nn.Module):
 
     def forward(self, inputs):
         out = self.bn1(inputs)
-        out = self.conv1(out)
         out = self.relu(out)
+        out = self.conv1(out)
 
         out = self.bn2(out)
+        out = self.relu(out)
         out = self.conv2(out)
 
         out = out + self.proj(inputs)
