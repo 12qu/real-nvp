@@ -20,7 +20,7 @@ from tensorboardX import SummaryWriter
 channels = None
 height = None
 width = None
-writer = SummaryWriter(comment="our_net_bn_after_relu")
+writer = SummaryWriter(comment="identity_resnet_bn_after_relu")
 
 def main(args):
     device = 'cuda' if torch.cuda.is_available() and len(args.gpu_ids) > 0 else 'cpu'

@@ -7,6 +7,62 @@ import torch.nn as nn
 import torchvision.utils
 
 
+
+# TODO: Batch norm correct?
+# TODO: Correct to use 1x1 convolution as projection? Do we need it?
+class NewResidualBlock(nn.Module):
+    def __init__(
+            self,
+            num_channels,
+            init_to_identity=False,
+            weight_norm=False,
+            batch_norm=True
+    ):
+        super().__init__()
+        self.conv1 = self._get_conv3x3(num_channels, weight_norm)
+        self.bn1 = self._get_batch_norm(num_channels, enable=batch_norm)
+        self.conv2 = self._get_conv3x3(num_channels, weight_norm)
+        self.bn2 = self._get_batch_norm(num_channels, enable=batch_norm)
+        self.relu = nn.ReLU()
+
+        if init_to_identity:
+            for p in self.conv2.parameters():
+                p.data.zero_()
+
+    def forward(self, inputs):
+        out = self.bn1(inputs)
+        out = self.relu(out)
+        out = self.conv1(out)
+
+        out = self.bn2(out)
+        out = self.relu(out)
+        out = self.conv2(out)
+
+        out = out + inputs
+
+        return out
+
+    def _get_batch_norm(self, channels, enable):
+        if enable:
+            return nn.BatchNorm2d(channels)
+        else:
+            return nn.Identity
+
+    def _get_conv3x3(self, num_channels, weight_norm):
+        conv = nn.Conv2d(
+            in_channels=num_channels,
+            out_channels=num_channels,
+            kernel_size=3,
+            stride=1,
+            padding=1
+        )
+
+        if weight_norm:
+            conv = nn.utils.weight_norm(conv)
+
+        return conv
+
+
 # TODO: Batch norm correct?
 # TODO: Correct to use 1x1 convolution as projection? Do we need it?
 class ResidualBlock(nn.Module):
