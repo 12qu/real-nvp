@@ -20,7 +20,7 @@ from tensorboardX import SummaryWriter
 channels = None
 height = None
 width = None
-writer = SummaryWriter(comment="identity_resnet_bn_after_relu")
+writer = SummaryWriter(comment="_us")
 
 def main(args):
     device = 'cuda' if torch.cuda.is_available() and len(args.gpu_ids) > 0 else 'cpu'
@@ -146,7 +146,9 @@ def test(epoch, net, testloader, device, loss_fn, num_samples):
         torch.save(state, 'ckpts/best.pth.tar')
         best_loss = loss_meter.avg
 
-    writer.add_scalar("mnist/log-prob/mnist", loss_meter.avg, global_step=epoch)
+    writer.add_scalar("mnist/log-prob/mnist", -loss_meter.avg, global_step=epoch)
+    writer.add_scalar("mnist/bpd/mnist", util.bits_per_dim(x, loss_meter.avg),
+            global_step=epoch)
 
     # Save samples and data
     images = sample(net, num_samples, device)

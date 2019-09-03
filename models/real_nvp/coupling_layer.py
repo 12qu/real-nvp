@@ -61,7 +61,7 @@ class CouplingLayer(nn.Module):
         self.st_net = get_st_net(in_channels, mid_channels)
 
         # Learnable scale for s
-        self.rescale = nn.utils.weight_norm(Rescale(in_channels))
+        self.rescale = Rescale(in_channels)
 
     def forward(self, x, sldj=None, reverse=True):
         if self.mask_type == MaskType.CHECKERBOARD:
