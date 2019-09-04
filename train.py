@@ -21,10 +21,12 @@ from oos.bijections import LogitTransformBijection
 
 from tensorboardX import SummaryWriter
 
+use_ours = False
+print(("U" if use_ours else "NOT u") + "sing our model")
 channels = None
 height = None
 width = None
-writer = SummaryWriter(comment="baseline")
+writer = SummaryWriter(comment=f"_{'our-model' if use_ours else 'baseline'}")
 
 def main(args):
     device = 'cuda' if torch.cuda.is_available() and len(args.gpu_ids) > 0 else 'cpu'
@@ -61,16 +63,18 @@ def main(args):
 
     # Model
     print('Building model..')
-    # net = RealNVP(num_scales=1, in_channels=channels, mid_channels=64, num_blocks=8)
 
-    net = get_conv_realnvp_density(1, (1, 28, 28))
-    net = BijectionDensity(
-        prior=net,
-        bijection=LogitTransformBijection(
-            input_shape=(1, 28, 28),
-            lam=1e-6
+    if use_ours:
+        net = get_conv_realnvp_density(1, (1, 28, 28))
+        net = BijectionDensity(
+            prior=net,
+            bijection=LogitTransformBijection(
+                input_shape=(1, 28, 28),
+                lam=1e-6
+            )
         )
-    )
+    else:
+        net = RealNVP(num_scales=1, in_channels=channels, mid_channels=64, num_blocks=8)
 
     net = net.to(device)
     # if device == 'cuda':
@@ -107,10 +111,14 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm):
         for x, _ in trainloader:
             x = x.to(device)
             optimizer.zero_grad()
-            result = net.elbo(x)
-            loss = -result["elbo"].mean()
-            # z, sldj = net(x, reverse=False)
-            # loss = loss_fn(z, sldj)
+
+            if use_ours:
+                result = net.elbo(x)
+                loss = -result["elbo"].mean()
+            else:
+                z, sldj = net(x, reverse=False)
+                loss = loss_fn(z, sldj)
+
             loss_meter.update(loss.item(), x.size(0))
             loss.backward()
             util.clip_grad_norm(optimizer, max_grad_norm)
@@ -148,10 +156,12 @@ def test(epoch, net, testloader, device, loss_fn, num_samples):
         with tqdm(total=len(testloader.dataset)) as progress_bar:
             for x, _ in testloader:
                 x = x.to(device)
-                # z, sldj = net(x, reverse=False)
-                # loss = loss_fn(z, sldj)
-                result = net.elbo(x)
-                loss = -result["elbo"].mean()
+                if use_ours:
+                    result = net.elbo(x)
+                    loss = -result["elbo"].mean()
+                else:
+                    z, sldj = net(x, reverse=False)
+                    loss = loss_fn(z, sldj)
                 loss_meter.update(loss.item(), x.size(0))
                 progress_bar.set_postfix(loss=loss_meter.avg,
                                          bpd=util.bits_per_dim(x, loss_meter.avg))
@@ -174,8 +184,10 @@ def test(epoch, net, testloader, device, loss_fn, num_samples):
             global_step=epoch)
 
     # Save samples and data
-    # images = sample(net, num_samples, device)
-    images = net.sample(num_samples) / 256
+    if use_ours:
+        images = net.sample(num_samples) / 256
+    else:
+        images = sample(net, num_samples, device)
     os.makedirs('samples', exist_ok=True)
     images_concat = torchvision.utils.make_grid(images, nrow=int(num_samples ** 0.5), padding=2, pad_value=255)
     torchvision.utils.save_image(images_concat, 'samples/epoch_{}.png'.format(epoch))

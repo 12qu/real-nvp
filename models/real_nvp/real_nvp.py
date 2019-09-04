@@ -23,17 +23,19 @@ class RealNVP(nn.Module):
     """
     def __init__(self, num_scales=2, in_channels=3, mid_channels=64, num_blocks=8):
         super(RealNVP, self).__init__()
+        lam = 1e-6
+        assert in_channels == 1, "Need different lam for cifar"
         # Register data_constraint to pre-process images, not learnable
-        self.register_buffer('data_constraint', torch.tensor([0.9], dtype=torch.float32))
+        self.register_buffer('data_constraint', torch.tensor([1 - 2*lam], dtype=torch.float32))
 
         self.flows = _RealNVP(0, num_scales, in_channels, mid_channels, num_blocks)
 
     def forward(self, x, reverse=False):
         sldj = None
         if not reverse:
-            # Expect inputs in [0, 1]
-            if x.min() < 0 or x.max() > 1:
-                raise ValueError('Expected x in [0, 1], got x with min/max {}/{}'
+            # Expect inputs in [0, 256]
+            if x.min() < 0 or x.max() > 256:
+                raise ValueError('Expected x in [0, 256], got x with min/max {}/{}'
                                  .format(x.min(), x.max()))
 
             # De-quantize and convert to logits
@@ -56,7 +58,7 @@ class RealNVP(nn.Module):
             - Dequantization: https://arxiv.org/abs/1511.01844, Section 3.1
             - Modeling logits: https://arxiv.org/abs/1605.08803, Section 4.1
         """
-        y = (x * 255. + torch.rand_like(x)) / 256.
+        y = x / 256.
         y = (2 * y - 1) * self.data_constraint
         y = (y + 1) / 2
         y = y.log() - (1. - y).log()
