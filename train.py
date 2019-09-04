@@ -21,12 +21,15 @@ from oos.bijections import LogitTransformBijection
 
 from tensorboardX import SummaryWriter
 
-use_ours = False
+use_ours = True
+enable_logging = True
+
 print(("U" if use_ours else "NOT u") + "sing our model")
+writer = SummaryWriter(comment=f"_{'our-model' if use_ours else 'baseline'}", write_to_disk=enable_logging)
+
 channels = None
 height = None
 width = None
-writer = SummaryWriter(comment=f"_{'our-model' if use_ours else 'baseline'}")
 
 def main(args):
     device = 'cuda' if torch.cuda.is_available() and len(args.gpu_ids) > 0 else 'cpu'
@@ -59,22 +62,25 @@ def main(args):
     testloader = data.DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
     global channels, height, width
-    channels, height, width = trainset[0][0].shape
+    x_shape = trainset[0][0].shape
+    channels, height, width = x_shape
 
     # Model
     print('Building model..')
 
     if use_ours:
-        net = get_conv_realnvp_density(1, (1, 28, 28))
         net = BijectionDensity(
-            prior=net,
+            prior=get_conv_realnvp_density(
+                layer=2,
+                x_shape=x_shape
+            ),
             bijection=LogitTransformBijection(
-                input_shape=(1, 28, 28),
+                input_shape=x_shape,
                 lam=1e-6
             )
         )
     else:
-        net = RealNVP(num_scales=1, in_channels=channels, mid_channels=64, num_blocks=8)
+        net = RealNVP(num_scales=2, in_channels=channels, mid_channels=64, num_blocks=8)
 
     net = net.to(device)
     # if device == 'cuda':
