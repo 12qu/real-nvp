@@ -15,6 +15,10 @@ import util
 from models import RealNVP, RealNVPLoss
 from tqdm import tqdm
 
+from oos.models import get_conv_realnvp_density
+from oos.densities import BijectionDensity
+from oos.bijections import LogitTransformBijection
+
 from tensorboardX import SummaryWriter
 
 channels = None
@@ -38,10 +42,18 @@ def main(args):
 
     # trainset = torchvision.datasets.CIFAR10(root='data', train=True, download=True, transform=transform_train)
     trainset = torchvision.datasets.MNIST(root='data', train=True, download=True, transform=transform_train)
+    x_train = trainset.data.to(torch.get_default_dtype()).view(-1, 1, 28, 28)
+    x_train += torch.rand_like(x_train)
+    y_train = trainset.targets
+    trainset = data.TensorDataset(x_train, y_train)
     trainloader = data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
     # testset = torchvision.datasets.CIFAR10(root='data', train=False, download=True, transform=transform_test)
     testset = torchvision.datasets.MNIST(root='data', train=False, download=True, transform=transform_test)
+    x_test = testset.data.to(torch.get_default_dtype()).view(-1, 1, 28, 28)
+    x_test += torch.rand_like(x_test)
+    y_test = testset.targets
+    testset = data.TensorDataset(x_test, y_test)
     testloader = data.DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
     global channels, height, width
@@ -49,15 +61,21 @@ def main(args):
 
     # Model
     print('Building model..')
-    net = RealNVP(num_scales=1, in_channels=channels, mid_channels=64, num_blocks=8)
-    
-    # print(net)
-    # exit()
+    # net = RealNVP(num_scales=1, in_channels=channels, mid_channels=64, num_blocks=8)
+
+    net = get_conv_realnvp_density(1, (1, 28, 28))
+    net = BijectionDensity(
+        prior=net,
+        bijection=LogitTransformBijection(
+            input_shape=(1, 28, 28),
+            lam=1e-6
+        )
+    )
 
     net = net.to(device)
-    if device == 'cuda':
-        net = torch.nn.DataParallel(net, args.gpu_ids)
-        cudnn.benchmark = args.benchmark
+    # if device == 'cuda':
+    #     net = torch.nn.DataParallel(net, args.gpu_ids)
+    #     cudnn.benchmark = args.benchmark
 
     if args.resume:
         # Load checkpoint.
@@ -73,6 +91,7 @@ def main(args):
     param_groups = util.get_param_groups(net, args.weight_decay, norm_suffix='weight_g')
     optimizer = optim.Adam(param_groups, lr=args.lr)
 
+    test(-1, net, testloader, device, loss_fn, args.num_samples)
     for epoch in range(start_epoch, start_epoch + args.num_epochs):
         train(epoch, net, trainloader, device, optimizer, loss_fn, args.max_grad_norm)
         test(epoch, net, testloader, device, loss_fn, args.num_samples)
@@ -80,6 +99,7 @@ def main(args):
 
 step = 0
 def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm):
+    global step
     print('\nEpoch: %d' % epoch)
     net.train()
     loss_meter = util.AverageMeter()
@@ -87,12 +107,15 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm):
         for x, _ in trainloader:
             x = x.to(device)
             optimizer.zero_grad()
-            z, sldj = net(x, reverse=False)
-            loss = loss_fn(z, sldj)
+            result = net.elbo(x)
+            loss = -result["elbo"].mean()
+            # z, sldj = net(x, reverse=False)
+            # loss = loss_fn(z, sldj)
             loss_meter.update(loss.item(), x.size(0))
             loss.backward()
             util.clip_grad_norm(optimizer, max_grad_norm)
             optimizer.step()
+
 
             writer.add_scalar("mnist/train-loss", loss.item(), global_step=step)
             step += 1
@@ -125,8 +148,10 @@ def test(epoch, net, testloader, device, loss_fn, num_samples):
         with tqdm(total=len(testloader.dataset)) as progress_bar:
             for x, _ in testloader:
                 x = x.to(device)
-                z, sldj = net(x, reverse=False)
-                loss = loss_fn(z, sldj)
+                # z, sldj = net(x, reverse=False)
+                # loss = loss_fn(z, sldj)
+                result = net.elbo(x)
+                loss = -result["elbo"].mean()
                 loss_meter.update(loss.item(), x.size(0))
                 progress_bar.set_postfix(loss=loss_meter.avg,
                                          bpd=util.bits_per_dim(x, loss_meter.avg))
@@ -144,19 +169,24 @@ def test(epoch, net, testloader, device, loss_fn, num_samples):
         torch.save(state, 'ckpts/best.pth.tar')
         best_loss = loss_meter.avg
 
-    writer.add_scalar("mnist/log-prob/mnist", loss_meter.avg, global_step=epoch)
+    writer.add_scalar("mnist/log-prob/mnist", -loss_meter.avg, global_step=epoch)
+    writer.add_scalar("mnist/bpd/mnist", util.bits_per_dim(x, loss_meter.avg),
+            global_step=epoch)
 
     # Save samples and data
-    images = sample(net, num_samples, device)
+    # images = sample(net, num_samples, device)
+    images = net.sample(num_samples) / 256
     os.makedirs('samples', exist_ok=True)
     images_concat = torchvision.utils.make_grid(images, nrow=int(num_samples ** 0.5), padding=2, pad_value=255)
     torchvision.utils.save_image(images_concat, 'samples/epoch_{}.png'.format(epoch))
+
+    writer.add_image("mnist/samples", images_concat / 256, global_step=epoch)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='RealNVP on CIFAR-10')
 
-    parser.add_argument('--batch_size', default=64, type=int, help='Batch size')
+    parser.add_argument('--batch_size', default=100, type=int, help='Batch size')
     parser.add_argument('--benchmark', action='store_true', help='Turn on CUDNN benchmarking')
     parser.add_argument('--gpu_ids', default='[0]', type=eval, help='IDs of GPUs to use')
     parser.add_argument('--lr', default=1e-3, type=float, help='Learning rate')
