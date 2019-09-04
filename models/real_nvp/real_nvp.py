@@ -29,7 +29,7 @@ class RealNVP(nn.Module):
         self.logit = LogitTransformBijection(input_shape=(1,28,28), lam=lam, add_log_jac=True)
 
         # Register data_constraint to pre-process images, not learnable
-        # self.register_buffer('data_constraint', torch.tensor([1 - 2*lam], dtype=torch.float32))
+        self.register_buffer('data_constraint', torch.tensor([1 - 2*lam], dtype=torch.float32))
 
         self.flows = _RealNVP(0, num_scales, in_channels, mid_channels, num_blocks)
 
@@ -71,7 +71,7 @@ class RealNVP(nn.Module):
     #     y = y.log() - (1. - y).log()
 
     #     # Save log-determinant of Jacobian of initial transform
-    #     ldj = -torch.log(1 - p) - torch.log(p) + np.log(self.data_constraint)
+    #     ldj = -torch.log(1 - p) - torch.log(p) + np.log(self.data_constraint.item())
     #     sldj = ldj.view(ldj.size(0), -1).sum(-1)
 
     #     return y, sldj

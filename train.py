@@ -20,7 +20,7 @@ from tensorboardX import SummaryWriter
 channels = None
 height = None
 width = None
-writer = SummaryWriter(comment="_us")
+writer = SummaryWriter(comment="_us_with_our_Logit")
 
 def main(args):
     device = 'cuda' if torch.cuda.is_available() and len(args.gpu_ids) > 0 else 'cpu'
@@ -49,7 +49,7 @@ def main(args):
     x_test = testset.data.to(torch.get_default_dtype()).view(-1, 1, 28, 28)
     x_test += torch.rand_like(x_test)
     y_test = testset.targets
-    trainset = data.TensorDataset(x_test, y_test)
+    testset = data.TensorDataset(x_test, y_test)
     testloader = data.DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
     global channels, height, width
