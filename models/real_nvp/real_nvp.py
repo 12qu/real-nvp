@@ -4,8 +4,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from oos.bijections import LogitTransformBijection, CompositeBijection, AffineCouplingBijection, ConvAffineCoupler
+
 from models.real_nvp.coupling_layer import CouplingLayer, MaskType
-from models.real_nvp.bijection import LogitTransformBijection
+from util import checkerboard_mask
 
 
 class RealNVP(nn.Module):
@@ -26,14 +28,32 @@ class RealNVP(nn.Module):
     def __init__(self, num_scales=2, in_channels=3, mid_channels=64, num_blocks=8):
         super(RealNVP, self).__init__()
         lam = 1e-6
-        self.logit = LogitTransformBijection(input_shape=(1,28,28), lam=lam, add_log_jac=True)
+        self.logit = LogitTransformBijection(input_shape=(1,28,28), lam=lam)
 
         # Register data_constraint to pre-process images, not learnable
         self.register_buffer('data_constraint', torch.tensor([1 - 2*lam], dtype=torch.float32))
 
-        self.flows = _RealNVP(0, num_scales, in_channels, mid_channels, num_blocks)
+        # self.flows = _RealNVP(0, num_scales, in_channels, mid_channels, num_blocks)
+
+        mask = checkerboard_mask(28, 28, reverse=False).squeeze(0)
+        flows = [self.logit]
+        for _ in range(4):
+            flow = AffineCouplingBijection(
+                mask=mask.to(torch.uint8),
+                coupler=ConvAffineCoupler(in_channels, mid_channels), num_u_channels=0
+            )
+            flows.append(flow)
+            mask = 1 - mask
+        self.flows = CompositeBijection(flows, "x-to-z")
 
     def forward(self, x, reverse=False):
+        if reverse:
+            result = self.flows.z_to_x(x)
+            return result["x"], result["log-jac"].view(x.shape[0])
+        else:
+            result = self.flows.x_to_z(x)
+            return result["z"], result["log-jac"].view(x.shape[0])
+
         sldj = None
         if not reverse:
             # Expect inputs in [0, 256]
@@ -62,7 +82,7 @@ class RealNVP(nn.Module):
             - Modeling logits: https://arxiv.org/abs/1605.08803, Section 4.1
         """
         result = self.logit.x_to_z(x)
-        return result["z"], result["log-jac"].view(-1)
+        return result["z"], result["log-jac"].view(x.shape[0])
 
     # def _pre_process(self, x):
     #     y = (2 * x/256 - 1) * self.data_constraint

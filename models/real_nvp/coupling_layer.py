@@ -5,7 +5,7 @@ from enum import IntEnum
 from models.resnet import ResidualBlock
 from util import checkerboard_mask
 
-from .realnvp import AffineCouplingBijection, ConvAffineCoupler
+from oos.bijections import AffineCouplingBijection, ConvAffineCoupler
 
 
 class MaskType(IntEnum):

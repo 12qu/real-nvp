@@ -20,7 +20,7 @@ from tensorboardX import SummaryWriter
 channels = None
 height = None
 width = None
-writer = SummaryWriter(comment="_us_with_our_Logit")
+writer = SummaryWriter(comment="_us_with_our_composite_bijection")
 
 def main(args):
     device = 'cuda' if torch.cuda.is_available() and len(args.gpu_ids) > 0 else 'cpu'
@@ -122,7 +122,8 @@ def sample(net, batch_size, device):
     """
     z = torch.randn((batch_size, channels, height, width), dtype=torch.float32, device=device)
     x, _ = net(z, reverse=True)
-    x = torch.sigmoid(x)
+    # x = torch.sigmoid(x)
+    x /= 256
 
     return x
 
