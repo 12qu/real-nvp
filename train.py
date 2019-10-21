@@ -15,17 +15,9 @@ import util
 from models import RealNVP, RealNVPLoss
 from tqdm import tqdm
 
-from oos.models import get_conv_realnvp_density
-from oos.densities import BijectionDensity
-from oos.bijections import LogitTransformBijection
-
-from tensorboardX import SummaryWriter
-
-use_ours = True
-enable_logging = True
-
-print(("U" if use_ours else "NOT u") + "sing our model")
-writer = SummaryWriter(comment=f"_{'our-model' if use_ours else 'baseline'}", write_to_disk=enable_logging)
+from lgf.models.factory import get_density
+from lgf.models.schemas import get_multiscale_realnvp_schema
+from lgf.writer import Writer, DummyWriter
 
 channels = None
 height = None
@@ -69,16 +61,7 @@ def main(args):
     print('Building model..')
 
     if use_ours:
-        net = BijectionDensity(
-            prior=get_conv_realnvp_density(
-                layer=2,
-                x_shape=x_shape
-            ),
-            bijection=LogitTransformBijection(
-                input_shape=x_shape,
-                lam=1e-6
-            )
-        )
+        net = get_density(x_shape, get_dinh_realnvp_density_structure("mnist"))
     else:
         net = RealNVP(num_scales=2, in_channels=channels, mid_channels=64, num_blocks=8)
 
@@ -131,7 +114,7 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm):
             optimizer.step()
 
 
-            writer.add_scalar("mnist/train-loss", loss.item(), global_step=step)
+            writer.write_scalar("train/loss", loss.item(), global_step=step)
             step += 1
 
             progress_bar.set_postfix(loss=loss_meter.avg,
@@ -185,8 +168,8 @@ def test(epoch, net, testloader, device, loss_fn, num_samples):
         torch.save(state, 'ckpts/best.pth.tar')
         best_loss = loss_meter.avg
 
-    writer.add_scalar("mnist/log-prob/mnist", -loss_meter.avg, global_step=epoch)
-    writer.add_scalar("mnist/bpd/mnist", util.bits_per_dim(x, loss_meter.avg),
+    writer.write_scalar("test/log-prob", -loss_meter.avg, global_step=epoch)
+    writer.write_scalar("test/bpd", util.bits_per_dim(x, loss_meter.avg),
             global_step=epoch)
 
     # Save samples and data
@@ -198,7 +181,7 @@ def test(epoch, net, testloader, device, loss_fn, num_samples):
     images_concat = torchvision.utils.make_grid(images, nrow=int(num_samples ** 0.5), padding=2, pad_value=255)
     torchvision.utils.save_image(images_concat, 'samples/epoch_{}.png'.format(epoch))
 
-    writer.add_image("mnist/samples", images_concat / 256, global_step=epoch)
+    writer.write_image("samples", images_concat / 256, global_step=epoch)
 
 
 if __name__ == '__main__':
@@ -215,7 +198,20 @@ if __name__ == '__main__':
     parser.add_argument('--resume', '-r', action='store_true', help='Resume from checkpoint')
     parser.add_argument('--weight_decay', default=5e-5, type=float,
                         help='L2 regularization (only applied to the weight norm scale factors)')
+    parser.add_argument("--us", action="store_true")
+    parser.add_argument("--nolog", action="store_true")
 
     best_loss = 0
 
-    main(parser.parse_args())
+    args = parser.parse_args()
+
+    use_ours = args.us
+
+    if args.nolog:
+        writer = DummyWriter()
+    else:
+        writer = Writer("runs", "mnist")
+
+    print(("U" if use_ours else "NOT u") + "sing our model")
+
+    main(args)
