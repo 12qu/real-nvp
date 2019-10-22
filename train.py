@@ -15,6 +15,9 @@ import util
 from models import RealNVP, RealNVPLoss
 from tqdm import tqdm
 
+from lgf.writer import Writer
+
+writer = Writer("runs", "cifar10")
 
 def main(args):
     device = 'cuda' if torch.cuda.is_available() and len(args.gpu_ids) > 0 else 'cpu'
@@ -63,7 +66,9 @@ def main(args):
         test(epoch, net, testloader, device, loss_fn, args.num_samples)
 
 
+step = 0
 def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm):
+    global step
     print('\nEpoch: %d' % epoch)
     net.train()
     loss_meter = util.AverageMeter()
@@ -77,6 +82,9 @@ def train(epoch, net, trainloader, device, optimizer, loss_fn, max_grad_norm):
             loss.backward()
             util.clip_grad_norm(optimizer, max_grad_norm)
             optimizer.step()
+
+            writer.write_scalar("train/loss", loss.item(), global_step=step)
+            step += 1
 
             progress_bar.set_postfix(loss=loss_meter.avg,
                                      bpd=util.bits_per_dim(x, loss_meter.avg))
@@ -125,12 +133,16 @@ def test(epoch, net, testloader, device, loss_fn, num_samples):
         torch.save(state, 'ckpts/best.pth.tar')
         best_loss = loss_meter.avg
 
+    writer.write_scalar("test/log-prob", -loss_meter.avg, global_step=epoch)
+    writer.write_scalar("test/bpd", util.bits_per_dim(x, loss_meter.avg))
+
     # Save samples and data
     images = sample(net, num_samples, device)
     os.makedirs('samples', exist_ok=True)
     images_concat = torchvision.utils.make_grid(images, nrow=int(num_samples ** 0.5), padding=2, pad_value=255)
     torchvision.utils.save_image(images_concat, 'samples/epoch_{}.png'.format(epoch))
 
+    writer.write_image("samples", images_concat / 256, global_step=epoch)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='RealNVP on CIFAR-10')
