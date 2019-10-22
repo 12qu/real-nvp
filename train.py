@@ -19,9 +19,7 @@ from lgf.models.factory import get_density
 from lgf.models.schemas import get_multiscale_realnvp_schema
 from lgf.writer import Writer, DummyWriter
 
-channels = None
-height = None
-width = None
+
 
 def main(args):
     device = 'cuda' if torch.cuda.is_available() and len(args.gpu_ids) > 0 else 'cpu'
@@ -37,25 +35,37 @@ def main(args):
         transforms.ToTensor()
     ])
 
-    # trainset = torchvision.datasets.CIFAR10(root='data', train=True, download=True, transform=transform_train)
-    trainset = torchvision.datasets.MNIST(root='data', train=True, download=True, transform=transform_train)
-    x_train = trainset.data.to(torch.get_default_dtype()).view(-1, 1, 28, 28)
+    if dataset == "cifar10":
+        trainset = torchvision.datasets.CIFAR10(root='data', train=True, download=True, transform=transform_train)
+        x_train = torch.tensor(trainset.data, dtype=torch.get_default_dtype())
+        x_train = x_train.permute(0, 3, 1, 2)
+        y_train = torch.tensor(trainset.targets)
+
+    elif dataset == "mnist":
+        trainset = torchvision.datasets.MNIST(root='data', train=True, download=True, transform=transform_train)
+        x_train = trainset.data.to(torch.get_default_dtype())
+        x_train = x_train.view(-1, 1, 28, 28)
+        y_train = trainset.targets
+
     x_train += torch.rand_like(x_train)
-    y_train = trainset.targets
     trainset = data.TensorDataset(x_train, y_train)
     trainloader = data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
-    # testset = torchvision.datasets.CIFAR10(root='data', train=False, download=True, transform=transform_test)
-    testset = torchvision.datasets.MNIST(root='data', train=False, download=True, transform=transform_test)
-    x_test = testset.data.to(torch.get_default_dtype()).view(-1, 1, 28, 28)
+    if dataset == "cifar10":
+        testset = torchvision.datasets.CIFAR10(root='data', train=False, download=True, transform=transform_test)
+        x_test = torch.tensor(testset.data, dtype=torch.get_default_dtype())
+        x_test = x_test.permute(0, 3, 1, 2)
+        y_test = torch.tensor(testset.targets)
+
+    elif dataset == "mnist":
+        testset = torchvision.datasets.MNIST(root='data', train=False, download=True, transform=transform_test)
+        x_test = testset.data.to(torch.get_default_dtype())
+        x_test = x_test.view(-1, 1, 28, 28)
+        y_test = testset.targets
+
     x_test += torch.rand_like(x_test)
-    y_test = testset.targets
     testset = data.TensorDataset(x_test, y_test)
     testloader = data.DataLoader(testset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
-
-    global channels, height, width
-    x_shape = trainset[0][0].shape
-    channels, height, width = x_shape
 
     # Model
     print('Building model..')
@@ -66,7 +76,7 @@ def main(args):
         )
         net = get_density(
             schema=schema,
-            x_shape=x_shape
+            x_shape=(channels, height, width)
         )
     else:
         net = RealNVP(num_scales=2, in_channels=channels, mid_channels=64, num_blocks=8)
@@ -206,17 +216,30 @@ if __name__ == '__main__':
                         help='L2 regularization (only applied to the weight norm scale factors)')
     parser.add_argument("--us", action="store_true")
     parser.add_argument("--nolog", action="store_true")
+    parser.add_argument("--dataset", choices=["mnist", "cifar10"], required=True)
 
     best_loss = 0
 
     args = parser.parse_args()
+
+    dataset = args.dataset
+    if dataset == "cifar10":
+        channels = 3
+        height = 32
+        width = 32
+    elif dataset == "mnist":
+        channels = 1
+        height = 28
+        width = 28
+    else:
+        assert False, f"Invalid dataset {dataset}"
 
     use_ours = args.us
 
     if args.nolog:
         writer = DummyWriter()
     else:
-        writer = Writer("runs", "mnist")
+        writer = Writer("runs", args.dataset)
 
     print(("U" if use_ours else "NOT u") + "sing our model")
 
